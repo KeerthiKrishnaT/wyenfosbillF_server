@@ -60,6 +60,13 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Add better logging for Railway
+console.log('🚀 Starting Wyenfos Bills Server...');
+console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`🔌 Port: ${PORT}`);
+console.log(`📁 Directory: ${__dirname}`);
+
 const server = http.createServer(app);
 const firebaseStorage = adminStorage;
 const io = new Server(server, {
