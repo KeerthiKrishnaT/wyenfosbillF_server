@@ -365,6 +365,15 @@ app.use('/api/product-returns', productReturnRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/tasks', tasksRoutes);
 
+// Add root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    message: 'Wyenfos Bills API Server',
+    status: 'running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Add health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ 
@@ -376,14 +385,21 @@ app.get('/health', (req, res) => {
 
 async function startServer() {
   try {
-    if (!db || !firebaseStorage) {
-      throw new Error('Firebase not initialized');
-    }
-
-    console.log('✅ Firebase initialized, starting server...');
+    // Start server first, then initialize Firebase
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      initializeAllCounters();
+      console.log(`🏥 Health check available at: http://localhost:${PORT}/health`);
+      
+      // Initialize Firebase counters in background (don't block server start)
+      if (db && firebaseStorage) {
+        console.log('✅ Firebase initialized, starting counters...');
+        initializeAllCounters().catch(error => {
+          console.error('❌ Counter initialization failed:', error.message);
+          // Don't exit - server can still run without counters
+        });
+      } else {
+        console.warn('⚠️ Firebase not initialized - some features may not work');
+      }
     });
   } catch (error) {
     console.error('❌ Server failed to start:', error.message);
