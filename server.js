@@ -374,15 +374,19 @@ app.use('/api/tasks', tasksRoutes);
 
 // Add root endpoint
 app.get('/', (req, res) => {
+  console.log('✅ Root endpoint accessed');
   res.status(200).json({ 
     message: 'Wyenfos Bills API Server',
     status: 'running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 5000
   });
 });
 
 // Add health check endpoint
 app.get('/health', (req, res) => {
+  console.log('✅ Health check endpoint accessed');
   res.status(200).json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
@@ -390,12 +394,28 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Add a simple test endpoint
+app.get('/test', (req, res) => {
+  console.log('✅ Test endpoint accessed');
+  res.status(200).json({ 
+    message: 'Server is working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 async function startServer() {
   try {
+    console.log('🚀 Starting Wyenfos Bills Server...');
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔌 Port: ${PORT}`);
+    console.log(`📁 Directory: ${__dirname}`);
+    
     // Start server first, then initialize Firebase
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🏥 Health check available at: http://localhost:${PORT}/health`);
+      console.log(`🌐 Server accessible at: http://0.0.0.0:${PORT}`);
+      console.log(`🏥 Health check available at: http://0.0.0.0:${PORT}/health`);
+      console.log(`📋 Root endpoint available at: http://0.0.0.0:${PORT}/`);
       
       // Initialize Firebase counters in background (don't block server start)
       if (db && firebaseStorage) {
@@ -408,6 +428,12 @@ async function startServer() {
         console.warn('⚠️ Firebase not initialized - some features may not work');
       }
     });
+    
+    // Add error handling for the server
+    server.on('error', (error) => {
+      console.error('❌ Server error:', error);
+    });
+    
   } catch (error) {
     console.error('❌ Server failed to start:', error.message);
     process.exit(1);
