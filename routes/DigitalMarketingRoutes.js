@@ -9,6 +9,7 @@ import {
   createPettyVoucher,
   getAllPettyVouchers,
   updatePettyVoucher,
+  deletePettyVoucher,
 } from '../controllers/pettyVoucherController.js';
 import { verifyToken } from '../middleware/AuthMiddleware.js';
 
@@ -18,6 +19,7 @@ const router = express.Router();
 router.get('/petty-vouchers', verifyToken, getAllPettyVouchers);
 router.post('/petty-vouchers', verifyToken, createPettyVoucher);
 router.put('/petty-vouchers/:id', verifyToken, updatePettyVoucher);
+router.delete('/petty-vouchers/:id', verifyToken, deletePettyVoucher);
 
 // Petty Cash Voucher Routes
 router.get('/petty-cash-vouchers', verifyToken, getAllPettyCashVouchers);

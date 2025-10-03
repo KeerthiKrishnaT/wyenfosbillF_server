@@ -261,13 +261,33 @@ export const handleChangeRequest = asyncHandler(async (req, res) => {
           });
           console.log('✅ Email updated in Firebase Auth');
           
+          // Wait for propagation
+          console.log('⏳ Waiting for email update to propagate (5 seconds)...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          // Verify the update
+          const updatedUser = await adminAuth.getUser(userRecord.uid);
+          console.log('✅ Email update verified:', updatedUser.email);
+          
           // Update user profile in Firestore
           const userDocRef = db.collection('users').doc(userRecord.uid);
           await userDocRef.update({
             email: requestData.newEmail,
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            emailChangedAt: new Date().toISOString(),
+            emailChangeStatus: 'completed',
+            emailUpdateTimestamp: new Date().toISOString()
           });
           console.log('✅ User profile updated in Firestore');
+          
+          // Revoke user sessions for immediate effect
+          try {
+            console.log('🔄 Revoking user sessions for immediate effect...');
+            await adminAuth.revokeRefreshTokens(userRecord.uid);
+            console.log('✅ User sessions revoked - user will need to login again');
+          } catch (revokeError) {
+            console.log('⚠️ Session revocation warning:', revokeError.message);
+          }
           
         } catch (error) {
           console.error('❌ Error updating email:', error);
@@ -316,10 +336,14 @@ export const handleChangeRequest = asyncHandler(async (req, res) => {
         details: {
           type: requestData.type,
           email: requestData.type === 'password' ? requestData.email : requestData.currentEmail,
+          newEmail: requestData.type === 'email' ? requestData.newEmail : null,
           updatedAt: new Date().toISOString(),
           waitTime: '1-2 minutes',
           requestId: requestId,
-          approvalTimestamp: new Date().toISOString()
+          approvalTimestamp: new Date().toISOString(),
+          loginInstructions: requestData.type === 'email' ? 
+            `User can now login with the new email: ${requestData.newEmail}` : 
+            'User can login with their existing email'
         }
       });
 

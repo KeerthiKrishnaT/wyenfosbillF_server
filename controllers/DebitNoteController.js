@@ -8,6 +8,8 @@ import { generateUniqueId } from '../services/firebaseService.js';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import QRCode from 'qrcode';
+import path from 'path';
+import fs from 'fs';
 
 dotenv.config();
 if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
@@ -553,48 +555,44 @@ const generatePDFFromUnsaved = async (req, res) => {
       creator: 'WYENFOS Billing System'
     });
 
+    // PDF layout variables
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    let y = 20; // Start from top
+
     // Company Logo and Details
     
-    // Company Logo (dynamic based on company name)
+    // Get the correct logo based on company name
+    const companyName = debitNoteData.company?.name || 'WYENFOS BILLS';
+    
+    // Company Logo - Simplified approach without external files
     try {
-      const fs = await import('fs');
-      const path = await import('path');
+      const initials = companyName.split(' ').map(word => word[0]).join('').substring(0, 3);
       
-      // Get the correct logo based on company name
-      const companyName = debitNoteData.company?.name || 'WYENFOS BILLS';
-      const logoFileName = getCompanyLogoPath(companyName);
-      const logoPath = path.join(process.cwd(), 'uploads', logoFileName);
-      
-      if (fs.existsSync(logoPath)) {
-        const logoBuffer = fs.readFileSync(logoPath);
-        
-        // Add the logo image to PDF
-        doc.addImage(logoBuffer, 'PNG', margin, y, 30, 30);
-      } else {
-        // Fallback to placeholder if logo not found
-        doc.setDrawColor(0, 0, 0);
-        doc.setFillColor(100, 100, 100);
-        doc.circle(margin + 15, y + 15, 15, 'F');
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.5);
-        doc.circle(margin + 15, y + 15, 15, 'S');
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        doc.text('LOGO', margin + 15, y + 15, { align: 'center' });
-      }
-    } catch (logoError) {
-      console.error('Error loading logo:', logoError);
-      // Fallback to placeholder
+      // Create a simple rectangular logo with company initials
       doc.setDrawColor(0, 0, 0);
-      doc.setFillColor(100, 100, 100);
-      doc.circle(margin + 15, y + 15, 15, 'F');
+      doc.setFillColor(52, 144, 220); // Blue background
+      doc.rect(margin, y, 25, 15, 'F'); // Rectangle instead of circle
       doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.5);
-      doc.circle(margin + 15, y + 15, 15, 'S');
+      doc.rect(margin, y, 25, 15, 'S'); // Border
+      
+      // Add company initials
       doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255); // White text
+      doc.setFont('helvetica', 'bold');
+      doc.text(initials, margin + 12.5, y + 9, { align: 'center' });
+      doc.setTextColor(0, 0, 0); // Reset to black
+    } catch (logoError) {
+      console.error('Error creating logo:', logoError);
+      // Minimal fallback
+      doc.setFontSize(8);
       doc.setTextColor(0, 0, 0);
-      doc.text('LOGO', margin + 15, y + 15, { align: 'center' });
+      doc.text('LOGO', margin, y + 8);
     }
+
+    // Skip center logo to reduce complexity and avoid file loading issues
 
     // Company Details (Right side of logo)
     const logoRightX = margin + 40;
@@ -743,12 +741,11 @@ const generatePDFFromUnsaved = async (req, res) => {
 
     y += 10;
 
-    // Check if we need a new page for totals section
-    const totalsSectionHeight = 8 + (6 * 6) + 20; // Header + 6 total lines + spacing
-    const pageHeight = 297; // A4 height in mm
+    // Check if we need a new page for totals section (more conservative check)
+    const totalsSectionHeight = 40; // Further reduced estimate
     const currentY = y;
     
-    // Check if totals section will fit on current page
+    // Only add new page if absolutely necessary (more space available)
     if (currentY + totalsSectionHeight > pageHeight - 30) {
       doc.addPage();
       y = 20; // Reset Y position for new page
@@ -844,65 +841,77 @@ const generatePDFFromUnsaved = async (req, res) => {
 
     y += 20;
 
-    // Check remaining space for terms and bank details
-    const termsHeight = 8 + (6 * 3) + 15; // Header + 3 terms + spacing
-    const bankDetailsHeight = 8 + (6 * 6) + 50; // Header + 6 bank details + QR + signature
+    // Check remaining space for terms and bank details (more conservative)
+    const termsHeight = 8 + (5 * 5) + 10; // Header + 5 terms + reduced spacing
+    const bankDetailsHeight = 8 + (6 * 5) + 35; // Header + 6 bank details + QR + signature (reduced)
     const remainingSpace = pageHeight - y;
     
-    // If not enough space, add new page
-    if (remainingSpace < termsHeight + bankDetailsHeight + 20) {
+    // Only add new page if really necessary (allow more content on current page)
+    if (remainingSpace < termsHeight + bankDetailsHeight + 10) {
       doc.addPage();
-      y = 20; // Reset Y position for new page
+      y = 15; // Start closer to top on new page
     }
 
-    // Terms & Conditions
+    // Terms & Conditions and Bank Details - Side by Side Layout
+    const leftColumnX = margin;
+    const rightColumnX = pageWidth / 2 + 10;
+    const startY = y;
+    
+    // Terms & Conditions (Left Side)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('Terms & Conditions:', margin, y);
+    doc.text('Terms & Conditions:', leftColumnX, y);
     y += 8;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     const terms = [
       '1. This debit note is issued as per agreed terms.',
-      '2. Payment should be processed within the specified due date.',
-      '3. Contact us for any discrepancies.'
+      '2. Contact us within 7 days for discrepancies.',
+      '3. Subject to applicable tax laws.',
+      '4. Payment should be made within the specified due date.',
+      '5. Late payments may incur additional charges.'
     ];
 
+    let termsY = y;
     terms.forEach((term, index) => {
-      doc.text(term, margin, y);
-      y += 6;
+      doc.text(term, leftColumnX, termsY);
+      termsY += 5; // Reduced spacing between terms
     });
 
-    y += 15;
-
-    // Bank Details Section
+    // Bank Details (Right Side)
+    let bankY = startY;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('Bank Details:', margin, y);
-    y += 8;
+    doc.text('Bank Details:', rightColumnX, bankY);
+    bankY += 8;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     const bankDetails = [
-      { label: 'Company name:', value: (debitNoteData.company && debitNoteData.company.name) ? debitNoteData.company.name : 'WYENFOS INFOTECH PRIVATE LIMITED' },
-      { label: 'Account number:', value: '10192468394' },
-      { label: 'IFSC:', value: 'IDFB0080732' },
-      { label: 'SWIFT code:', value: 'IDFBINBBMUM' },
-      { label: 'Bank name:', value: 'IDFC FIRST' },
-      { label: 'Branch:', value: 'THRISSUR - EAST FORT THRISSUR BRANCH' }
+      { label: 'Company name:', value: (debitNoteData.company && debitNoteData.company.name) ? debitNoteData.company.name : 'WYENFOS' },
+      { label: 'Account number:', value: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.accountNumber) ? debitNoteData.company.bankDetails.accountNumber : '9988776655' },
+      { label: 'IFSC:', value: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.ifsc) ? debitNoteData.company.bankDetails.ifsc : 'KKBK0009988' },
+      { label: 'SWIFT code:', value: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.swiftCode) ? debitNoteData.company.bankDetails.swiftCode : 'KKBKINBB' },
+      { label: 'Bank name:', value: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.bankName) ? debitNoteData.company.bankDetails.bankName : 'Kotak Mahindra Bank' },
+      { label: 'Branch:', value: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.branch) ? debitNoteData.company.bankDetails.branch : 'Ahmedabad CG Road Branch' }
     ];
 
-    // QR Code and Signature (Right side of bank details)
-    const qrSize = 40;
-    const qrX = pageWidth - margin - qrSize;
-    const qrY = y - 8; // Start QR code at the same level as bank details header
+    // Bank details rendering (Right Side)
+    bankDetails.forEach(detail => {
+      doc.setFont('helvetica', 'bold');
+      doc.text(detail.label, rightColumnX, bankY);
+      doc.setFont('helvetica', 'normal');
+      doc.text(detail.value, rightColumnX + 40, bankY);
+      bankY += 5; // Reduced spacing between bank details
+    });
 
-    // QR Code (use existing QR code or generate new one)
+    // QR Code (Bottom Right, below bank details)
+    const qrX = rightColumnX + 60;
+    const qrY = bankY + 5; // Reduced spacing
+    const qrSize = 35; // Smaller QR code
+
     try {
-      const fs = await import('fs');
-      const path = await import('path');
-      
       // Try to use existing QR code file
       const qrCodePath = path.join(process.cwd(), 'uploads', 'bank-qr-codes', 'WYENFOS_QR_1755336487474.png');
       
@@ -918,10 +927,10 @@ const generatePDFFromUnsaved = async (req, res) => {
         // Generate QR code data (bank details for payment)
         const qrData = {
           company: (debitNoteData.company && debitNoteData.company.name) ? debitNoteData.company.name : 'WYENFOS',
-          accountNumber: '10192468394',
-          ifsc: 'IDFB0080732',
-          bankName: 'IDFC FIRST',
-          branch: 'THRISSUR - EAST FORT THRISSUR BRANCH',
+          accountNumber: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.accountNumber) ? debitNoteData.company.bankDetails.accountNumber : '9988776655',
+          ifsc: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.ifsc) ? debitNoteData.company.bankDetails.ifsc : 'KKBK0009988',
+          bankName: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.bankName) ? debitNoteData.company.bankDetails.bankName : 'Kotak Mahindra Bank',
+          branch: (debitNoteData.company && debitNoteData.company.bankDetails && debitNoteData.company.bankDetails.branch) ? debitNoteData.company.bankDetails.branch : 'Ahmedabad CG Road Branch',
           amount: totals.totalAmount || '0',
           noteNumber: debitNoteData.invoiceNumber || 'N/A'
         };
@@ -956,25 +965,20 @@ const generatePDFFromUnsaved = async (req, res) => {
     }
 
     // Add QR code label
-    doc.setFontSize(8);
-    doc.text('SCAN TO PAY', qrX + qrSize/2, qrY + qrSize + 5, { align: 'center' });
+    doc.setFontSize(7);
+    doc.text('SCAN TO PAY', qrX + qrSize/2, qrY + qrSize + 3, { align: 'center' });
 
-    // Bank details (left side)
-    bankDetails.forEach(detail => {
-      doc.setFont('helvetica', 'bold');
-      doc.text(detail.label, margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(detail.value, margin + 50, y);
-      y += 6;
-    });
-
-    // Signature (right side, same level as bank details)
-    const signatureY = qrY + qrSize + 20;
+    // Signature (bottom right) - reduced spacing
+    const signatureY = Math.max(termsY, bankY) + 10; // Reduced from 20 to 10
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('Authorized Signatory', qrX, signatureY);
+    doc.setFontSize(9); // Reduced font size
+    doc.text('Authorized Signatory', rightColumnX, signatureY);
     doc.setFont('helvetica', 'normal');
-    doc.text(debitNoteData.company?.name || 'WYENFOS', qrX, signatureY + 6);
+    doc.setFontSize(8); // Reduced font size
+    doc.text(debitNoteData.company?.name || 'WYENFOS', rightColumnX, signatureY + 5); // Reduced spacing
+    
+    // Update y position for any additional content
+    y = Math.max(termsY, bankY, signatureY + 10); // Reduced final spacing
 
     // Convert PDF to base64
     const pdfBase64 = doc.output('datauristring').split(',')[1];

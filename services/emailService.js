@@ -162,9 +162,23 @@ export const sendApprovalEmail = async (requestData, action) => {
         <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 20px 0;">
           <p style="margin: 0; color: #2d5a2d;">
             <strong>${action === 'approved' ? '✅ Approved' : '❌ Rejected'}:</strong> 
-            ${action === 'approved' ? 'Your request has been approved and the changes have been applied.' : 'Your request has been rejected. Please contact the administrator for more information.'}
+            ${action === 'approved' ? 
+              (type === 'email' ? 
+                'Your email change request has been approved. You can now login using your new email address. Please wait 1-2 minutes before attempting to login.' :
+                'Your password change request has been approved and the changes have been applied. Please wait 1-2 minutes before attempting to login.'
+              ) : 
+              'Your request has been rejected. Please contact the administrator for more information.'
+            }
           </p>
         </div>
+        
+        ${action === 'approved' && type === 'email' ? `
+          <div style="background: #d1ecf1; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; color: #0c5460;">
+              <strong>📧 Login Instructions:</strong> You can now login to your account using your new email address: <strong>${newEmail}</strong>
+            </p>
+          </div>
+        ` : ''}
         
         <div style="text-align: center; margin-top: 30px; color: #666; font-size: 12px;">
           <p>This is an automated notification from Wyenfos Bills System</p>
@@ -174,7 +188,7 @@ export const sendApprovalEmail = async (requestData, action) => {
 
     const mailOptions = {
       from: process.env.MAIL_USER,
-      to: type === 'password' ? email : currentEmail,
+      to: type === 'password' ? email : (action === 'approved' ? newEmail : currentEmail),
       subject: `🔄 Change Request ${action === 'approved' ? 'Approved' : 'Rejected'} - ${requestId}`,
       html: emailContent
     };

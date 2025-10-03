@@ -11,7 +11,10 @@ import {
   sendEmail,
   sendEmailUnsaved,
   generatePDFFromUnsaved,
-  findBillByNumber
+  findBillByNumber,
+  getCreditBills,
+  getCashBills,
+  listAvailableBills
 } from '../controllers/CreditNoteController.js';
 
 const router = express.Router();
@@ -28,5 +31,8 @@ router.post('/generate-pdf-unsaved', generatePDFFromUnsaved);
 router.post('/email', verifyToken, sendEmail);
 router.post('/send-email', sendEmailUnsaved);
 router.get('/find-bill/:billNumber', verifyToken, findBillByNumber);
+router.get('/credit-bills', verifyToken, getCreditBills);
+router.get('/cash-bills', verifyToken, getCashBills);
+router.get('/list-bills', verifyToken, listAvailableBills);
 
 export default router;

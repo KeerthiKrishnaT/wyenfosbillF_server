@@ -9,7 +9,9 @@ function generateVoucherId(latestNumber) {
 
 export const createPettyVoucher = async (req, res) => {
   try {
-    const { date, amount, purpose } = req.body;
+    const { date, amount, purpose, paidTo, account, receivedBy, paidBy } = req.body;
+    
+    console.log('Creating petty voucher with data:', { date, amount, purpose, paidTo, account, receivedBy, paidBy });
 
     // Validate input
     if (!date || !amount || !purpose) {
@@ -28,13 +30,30 @@ export const createPettyVoucher = async (req, res) => {
       date,
       amount,
       purpose,
+      paidTo: paidTo || null,
+      account: account || null,
+      receivedBy: receivedBy || null,
+      paidBy: paidBy || null,
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
     const voucher = await firebaseService.create('pettyVouchers', voucherData);
+    
+    console.log('Petty voucher created successfully:', voucher);
+    console.log('Voucher data being returned:', {
+      id: voucher.id,
+      voucherId: voucher.voucherId,
+      date: voucher.date,
+      amount: voucher.amount,
+      purpose: voucher.purpose,
+      paidTo: voucher.paidTo,
+      account: voucher.account,
+      receivedBy: voucher.receivedBy,
+      paidBy: voucher.paidBy
+    });
 
-    res.status(201).json({ message: 'Petty Voucher created', voucher });
+    res.status(201).json(voucher);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -43,10 +62,21 @@ export const createPettyVoucher = async (req, res) => {
 export const getAllPettyVouchers = async (req, res) => {
   try {
     const vouchers = await firebaseService.getAll('pettyVouchers');
+    console.log('All petty vouchers from database:', vouchers);
+    console.log('Sample voucher data:', vouchers[0] ? {
+      id: vouchers[0].id,
+      voucherId: vouchers[0].voucherId,
+      paidTo: vouchers[0].paidTo,
+      account: vouchers[0].account,
+      receivedBy: vouchers[0].receivedBy,
+      paidBy: vouchers[0].paidBy
+    } : 'No vouchers found');
+    
     // Sort by creation date (newest first)
     vouchers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(vouchers);
   } catch (err) {
+    console.error('Error fetching petty vouchers:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -82,5 +112,21 @@ export const updatePettyVoucher = async (req, res) => {
   } catch (err) {
     console.error('Update error:', err.message);
     res.status(400).json({ error: err.message });
+  }
+};
+
+export const deletePettyVoucher = async (req, res) => {
+  try {
+    const voucher = await firebaseService.delete('pettyVouchers', req.params.id);
+    
+    if (!voucher) {
+      return res.status(404).json({ error: 'Petty voucher not found' });
+    }
+    
+    console.log('Petty voucher deleted successfully:', req.params.id);
+    res.json({ message: 'Petty voucher deleted successfully' });
+  } catch (err) {
+    console.error('Delete petty voucher error:', err);
+    res.status(500).json({ error: err.message });
   }
 };

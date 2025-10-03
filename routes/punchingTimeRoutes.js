@@ -7,7 +7,8 @@ import {
   recordLogin,
   recordLogout,
   getUserSessions,
-  getCurrentPunchingTime
+  getCurrentPunchingTime,
+  getUserSessionHistory
 } from '../controllers/punchingTimeController.js';
 import { verifyToken } from '../middleware/AuthMiddleware.js';
 
@@ -20,5 +21,6 @@ router.delete('/:id', verifyToken, deletePunchingTime);
 router.post('/record-login', verifyToken, recordLogin);
 router.post('/record-logout', verifyToken, recordLogout);
 router.get('/user-sessions/:userId', verifyToken, getUserSessions);
+router.get('/user-session-history', verifyToken, getUserSessionHistory);
 
 export default router;

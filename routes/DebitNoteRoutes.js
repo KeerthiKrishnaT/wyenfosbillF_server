@@ -17,6 +17,8 @@ import {
   requestPermission,
   generatePDFFromUnsaved
 } from '../controllers/DebitNoteController.js';
+import { getCustomers } from '../controllers/CustomerController.js';
+import { requestEdit } from '../controllers/notificationsController.js';
 import {
   validateDebitNote,
   validateCreditBill,
@@ -31,7 +33,11 @@ const router = express.Router();
 router.post('/permission/check', verifyToken, checkPermission);
 router.post('/permission/request', verifyToken, requestPermission);
 
+// Notifications routes
+router.post('/notifications/request-permission', verifyToken, requestEdit);
+
 // Customer Routes
+router.get('/customers', verifyToken, getCustomers);
 router.get('/customers/find', verifyToken, (req, res, next) => {
   if (!req.query.company) {
     return res.status(400).json({ message: 'Company query parameter is required' });

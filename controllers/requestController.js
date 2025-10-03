@@ -3,29 +3,56 @@ import { generateUniqueId } from '../services/firebaseService.js';
 
 export const createPermissionRequest = async (req, res) => {
   try {
-    const { resourceId, resourceType, action, reason } = req.body;
+    // Handle both old format (debit notes) and new format (vouchers)
+    const { 
+      resourceId, 
+      resourceType, 
+      action, 
+      reason,
+      // New format fields
+      billType,
+      billId,
+      requestedBy,
+      status,
+      voucherData
+    } = req.body;
 
     if (!reason || reason.length < 10) {
       return res.status(400).json({ success: false, message: 'Reason must be at least 10 characters' });
     }
 
-    const resourceLink = `/debitnotes/${resourceId}`;
+    // Determine the actual resource ID and type
+    const actualResourceId = resourceId || billId;
+    const actualResourceType = resourceType || billType;
+    const actualAction = action || 'edit'; // Default to edit if not specified
+
+    if (!actualResourceId) {
+      return res.status(400).json({ success: false, message: 'Resource ID is required' });
+    }
+
+    const resourceLink = actualResourceType === 'debitnote' 
+      ? `/debitnotes/${actualResourceId}`
+      : `/${actualResourceType}/${actualResourceId}`;
+    
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const formattedDate = new Date().toISOString().split('T')[0];
 
     const requestData = {
       id: generateUniqueId(),
-      resourceId,
-      resourceType,
+      resourceId: actualResourceId,
+      resourceType: actualResourceType,
       resourceLink,
       userId: req.user.id,
-      action,
+      action: actualAction,
       reason,
-      status: 'pending',
+      status: status || 'pending',
       formattedDate,
       expiresAt,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      // Additional fields for voucher requests
+      ...(voucherData && { voucherData }),
+      ...(requestedBy && { requestedBy })
     };
 
     await firebaseService.create('requests', requestData);

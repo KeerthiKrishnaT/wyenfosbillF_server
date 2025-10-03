@@ -86,7 +86,7 @@ export const deletePunchingTime = async (req, res) => {
 
 export const recordLogin = async (req, res) => {
   try {
-    const { email, role, name } = req.body;
+    const { email, role, name, department } = req.body;
     
     if (!email || !role) {
       return res.status(400).json({ 
@@ -100,23 +100,44 @@ export const recordLogin = async (req, res) => {
     
     // Check if user already has an active session
     const allPunchingTimes = await firebaseService.getAll('punchingTimes');
+    console.log('All punching times:', allPunchingTimes.map(pt => ({ id: pt.id, email: pt.email, punchOut: pt.punchOut })));
+    
     const activeSession = allPunchingTimes.find(pt => 
       pt.email === email && !pt.punchOut
     );
     
+    console.log('Active session found:', activeSession);
+    
     if (activeSession) {
-      return res.status(400).json({ 
-        error: 'User already has an active punching session',
-        suggestion: 'Please punch out first before punching in again'
-      });
+      // Instead of returning error, update the existing session with new login time
+      // Use the Firestore document ID, not the custom id field
+      const docId = activeSession.id; // This should be the Firestore document ID
+      console.log('Updating existing session with ID:', docId);
+      console.log('Active session full object:', JSON.stringify(activeSession, null, 2));
+      
+      try {
+        const updatedSession = await firebaseService.update('punchingTimes', docId, {
+          punchIn,
+          loginTime: punchIn,
+          updatedAt: serverTime
+        });
+        return res.json({
+          message: 'Session updated with new login time',
+          session: updatedSession
+        });
+      } catch (updateError) {
+        console.error('Failed to update existing session, creating new one:', updateError.message);
+        // If update fails, continue to create a new session
+      }
     }
 
     const punchingTimeData = {
-      id: generateUniqueId(),
       email,
       role,
       name: name || 'Unknown User',
+      department: department || null,
       punchIn,
+      loginTime: punchIn,
       date: serverTime.toISOString().split('T')[0],
       createdAt: serverTime,
       updatedAt: serverTime
@@ -158,6 +179,7 @@ export const recordLogout = async (req, res) => {
     
     const updateData = {
       punchOut,
+      logoutTime: punchOut,
       duration: Math.floor((serverTime - new Date(punchingTime.punchIn)) / (1000 * 60)),
       updatedAt: serverTime
     };
@@ -214,5 +236,41 @@ export const getCurrentPunchingTime = async (req, res) => {
   } catch (err) {
     console.error('getCurrentPunchingTime error:', err);
     res.json(null);
+  }
+};
+
+// Get user session history
+export const getUserSessionHistory = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || !user.email) {
+      return res.status(400).json({ error: 'User email is required' });
+    }
+
+    const allPunchingTimes = await firebaseService.getAll('punchingTimes');
+    const userSessions = allPunchingTimes
+      .filter(pt => pt.email === user.email)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Format the sessions with readable information
+    const formattedSessions = userSessions.map(session => ({
+      id: session.id,
+      email: session.email,
+      name: session.name,
+      role: session.role,
+      department: session.department,
+      loginTime: session.loginTime || session.punchIn,
+      logoutTime: session.logoutTime || session.punchOut,
+      duration: session.duration,
+      date: session.date,
+      isActive: !session.punchOut,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt
+    }));
+
+    res.json(formattedSessions);
+  } catch (err) {
+    console.error('getUserSessionHistory error:', err);
+    res.status(500).json({ error: err.message });
   }
 };

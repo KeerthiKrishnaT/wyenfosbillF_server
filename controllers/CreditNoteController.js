@@ -10,6 +10,8 @@ import nodemailer from 'nodemailer';
 import { withRetry } from '../services/retryLogic.js';
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
+import path from 'path';
+import fs from 'fs';
 
 // Helper function to get the correct logo path based on company name
 const getCompanyLogoPath = (companyName) => {
@@ -659,7 +661,7 @@ const generatePDF = async (req, res) => {
       { label: 'Payment Mode:', value: creditNote.paymentMode || 'Credit' }
     ];
 
-    const rightCustomerX = pageWidth - margin - 80;
+    const rightCustomerX = pageWidth / 2 + 20; // Align with red line position
     let leftY = y;
     let rightY = y;
 
@@ -695,7 +697,7 @@ const generatePDF = async (req, res) => {
     let x = margin;
 
     // Draw background for headers
-    doc.setFillColor(240, 240, 240);
+    doc.setFillColor(153, 122, 141); // #997a8d
     doc.rect(x, y - 5, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
 
     headers.forEach((header, index) => {
@@ -747,7 +749,7 @@ const generatePDF = async (req, res) => {
     doc.setFontSize(10);
     doc.text('Taxable Amount:', totalsX, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(`₹${(totals.subtotal || 0).toFixed(2)}`), totalsX + 50, y);
+    doc.text(`Rs.${(totals.subtotal || 0).toFixed(2)}`, totalsX + 50, y);
     y += 6;
 
     // Handle returned amount instead of tax fields
@@ -755,20 +757,20 @@ const generatePDF = async (req, res) => {
       doc.setFont('helvetica', 'bold');
       doc.text('Returned Amount:', totalsX, y);
       doc.setFont('helvetica', 'normal');
-      doc.text(String(`₹${(totals.returnedAmount || 0).toFixed(2)}`), totalsX + 50, y);
+      doc.text(`Rs.${(totals.returnedAmount || 0).toFixed(2)}`, totalsX + 50, y);
       y += 6;
     }
 
     doc.setFont('helvetica', 'bold');
     doc.text('Round Off:', totalsX, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(`₹${(totals.roundOff || 0).toFixed(2)}`), totalsX + 50, y);
+    doc.text(`Rs.${(totals.roundOff || 0).toFixed(2)}`, totalsX + 50, y);
     y += 8;
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text('Grand Total:', totalsX, y);
-    doc.text(String(`₹${(totals.grandTotal || 0).toFixed(2)}`), totalsX + 50, y);
+    doc.text(`Rs.${(totals.grandTotal || 0).toFixed(2)}`, totalsX + 50, y);
 
     y += 20;
 
@@ -833,12 +835,12 @@ const generatePDF = async (req, res) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     const bankDetails = [
-      { label: 'Company name:', value: (creditNote.company && creditNote.company.name) ? creditNote.company.name : 'WYENFOS INFOTECH PRIVATE LIMITED' },
-      { label: 'Account number:', value: '10192468394' },
-      { label: 'IFSC:', value: 'IDFB0080732' },
-      { label: 'SWIFT code:', value: 'IDFBINBBMUM' },
-      { label: 'Bank name:', value: 'IDFC FIRST' },
-      { label: 'Branch:', value: 'THRISSUR - EAST FORT THRISSUR BRANCH' }
+      { label: 'Company name:', value: (creditNote.company && creditNote.company.name) ? creditNote.company.name : 'WYENFOS' },
+      { label: 'Account number:', value: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.accountNumber) ? creditNote.company.bankDetails.accountNumber : '9988776655' },
+      { label: 'IFSC:', value: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.ifsc) ? creditNote.company.bankDetails.ifsc : 'KKBK0009988' },
+      { label: 'SWIFT code:', value: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.swiftCode) ? creditNote.company.bankDetails.swiftCode : 'KKBKINBB' },
+      { label: 'Bank name:', value: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.bankName) ? creditNote.company.bankDetails.bankName : 'Kotak Mahindra Bank' },
+      { label: 'Branch:', value: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.branch) ? creditNote.company.bankDetails.branch : 'Ahmedabad CG Road Branch' }
     ];
 
     // QR Code and Signature (Right side of bank details)
@@ -867,10 +869,10 @@ const generatePDF = async (req, res) => {
         // Generate QR code data (bank details for payment)
         const qrData = {
           company: (creditNote.company && creditNote.company.name) ? creditNote.company.name : 'WYENFOS',
-          accountNumber: '10192468394',
-          ifsc: 'IDFB0080732',
-          bankName: 'IDFC FIRST',
-          branch: 'THRISSUR - EAST FORT THRISSUR BRANCH',
+          accountNumber: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.accountNumber) ? creditNote.company.bankDetails.accountNumber : '10192468394',
+          ifsc: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.ifsc) ? creditNote.company.bankDetails.ifsc : 'KKBK0007348',
+          bankName: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.bankName) ? creditNote.company.bankDetails.bankName : 'Kotak Mahindra Bank',
+          branch: (creditNote.company && creditNote.company.bankDetails && creditNote.company.bankDetails.branch) ? creditNote.company.bankDetails.branch : 'Thrissur Branch',
           amount: totals.grandTotal || '0',
           noteNumber: creditNote.invoiceNumber || 'N/A'
         };
@@ -1088,7 +1090,7 @@ const generatePDFFromUnsaved = async (req, res) => {
       { label: 'Payment Mode:', value: creditNoteData.paymentMode || 'Credit' }
     ];
 
-    const rightCustomerX = pageWidth - margin - 80;
+    const rightCustomerX = pageWidth / 2 + 20; // Align with red line position
     let leftY = y;
     let rightY = y;
 
@@ -1176,7 +1178,7 @@ const generatePDFFromUnsaved = async (req, res) => {
     doc.setFontSize(10);
     doc.text('Taxable Amount:', totalsX, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(`₹${(totals.subtotal || 0).toFixed(2)}`), totalsX + 50, y);
+    doc.text(`Rs.${(totals.subtotal || 0).toFixed(2)}`, totalsX + 50, y);
     y += 6;
 
     // Handle returned amount instead of tax fields
@@ -1184,20 +1186,20 @@ const generatePDFFromUnsaved = async (req, res) => {
       doc.setFont('helvetica', 'bold');
       doc.text('Returned Amount:', totalsX, y);
       doc.setFont('helvetica', 'normal');
-      doc.text(String(`₹${(totals.returnedAmount || 0).toFixed(2)}`), totalsX + 50, y);
+      doc.text(`Rs.${(totals.returnedAmount || 0).toFixed(2)}`, totalsX + 50, y);
       y += 6;
     }
 
     doc.setFont('helvetica', 'bold');
     doc.text('Round Off:', totalsX, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(`₹${(totals.roundOff || 0).toFixed(2)}`), totalsX + 50, y);
+    doc.text(`Rs.${(totals.roundOff || 0).toFixed(2)}`, totalsX + 50, y);
     y += 8;
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.text('Grand Total:', totalsX, y);
-    doc.text(String(`₹${(totals.grandTotal || 0).toFixed(2)}`), totalsX + 50, y);
+    doc.text(`Rs.${(totals.grandTotal || 0).toFixed(2)}`, totalsX + 50, y);
 
     y += 20;
 
@@ -1262,12 +1264,12 @@ const generatePDFFromUnsaved = async (req, res) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     const bankDetails = [
-      { label: 'Company name:', value: (creditNoteData.company && creditNoteData.company.name) ? creditNoteData.company.name : 'WYENFOS INFOTECH PRIVATE LIMITED' },
-      { label: 'Account number:', value: '10192468394' },
-      { label: 'IFSC:', value: 'IDFB0080732' },
-      { label: 'SWIFT code:', value: 'IDFBINBBMUM' },
-      { label: 'Bank name:', value: 'IDFC FIRST' },
-      { label: 'Branch:', value: 'THRISSUR - EAST FORT THRISSUR BRANCH' }
+      { label: 'Company name:', value: (creditNoteData.company && creditNoteData.company.name) ? creditNoteData.company.name : 'WYENFOS' },
+      { label: 'Account number:', value: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.accountNumber) ? creditNoteData.company.bankDetails.accountNumber : '10192468394' },
+      { label: 'IFSC:', value: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.ifsc) ? creditNoteData.company.bankDetails.ifsc : 'KKBK0007348' },
+      { label: 'SWIFT code:', value: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.swiftCode) ? creditNoteData.company.bankDetails.swiftCode : 'KKBKINBB' },
+      { label: 'Bank name:', value: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.bankName) ? creditNoteData.company.bankDetails.bankName : 'Kotak Mahindra Bank' },
+      { label: 'Branch:', value: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.branch) ? creditNoteData.company.bankDetails.branch : 'Thrissur Branch' }
     ];
 
     // QR Code and Signature (Right side of bank details)
@@ -1296,10 +1298,10 @@ const generatePDFFromUnsaved = async (req, res) => {
         // Generate QR code data (bank details for payment)
         const qrData = {
           company: (creditNoteData.company && creditNoteData.company.name) ? creditNoteData.company.name : 'WYENFOS',
-          accountNumber: '10192468394',
-          ifsc: 'IDFB0080732',
-          bankName: 'IDFC FIRST',
-          branch: 'THRISSUR - EAST FORT THRISSUR BRANCH',
+          accountNumber: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.accountNumber) ? creditNoteData.company.bankDetails.accountNumber : '10192468394',
+          ifsc: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.ifsc) ? creditNoteData.company.bankDetails.ifsc : 'KKBK0007348',
+          bankName: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.bankName) ? creditNoteData.company.bankDetails.bankName : 'Kotak Mahindra Bank',
+          branch: (creditNoteData.company && creditNoteData.company.bankDetails && creditNoteData.company.bankDetails.branch) ? creditNoteData.company.bankDetails.branch : 'Thrissur Branch',
           amount: totals.grandTotal || '0',
           noteNumber: creditNoteData.invoiceNumber || 'N/A'
         };
@@ -1380,6 +1382,8 @@ const findBillByNumber = async (req, res) => {
     const { billNumber } = req.params;
     const { billType } = req.query; // 'cashbill' or 'creditbill'
     
+    console.log('🔍 Finding bill:', { billNumber, billType });
+    
     if (!billNumber) {
       return res.status(400).json({ message: 'Bill number is required' });
     }
@@ -1388,21 +1392,88 @@ const findBillByNumber = async (req, res) => {
     
     if (billType === 'cashbill') {
       const cashBills = await firebaseService.getAll('cashbills');
-      bill = cashBills.find(b => b.invoiceNumber === billNumber);
+      console.log('🔍 Cash bills found:', cashBills.length);
+      console.log('🔍 Cash bill numbers (invoiceNumber):', cashBills.map(b => b.invoiceNumber));
+      console.log('🔍 Cash bill numbers (invoiceNo):', cashBills.map(b => b.invoiceNo));
+      console.log('🔍 Looking for bill number:', billNumber);
+      
+      // Try multiple field names since Firebase might use different field names
+      console.log('🔍 Cash bill fields sample:', cashBills[0] ? Object.keys(cashBills[0]) : 'No bills');
+      bill = cashBills.find(b => 
+        b.invoiceNumber === billNumber || 
+        b.invoiceNo === billNumber ||
+        b.cashBillNo === billNumber ||
+        b.invoiceNumber?.toString() === billNumber ||
+        b.invoiceNo?.toString() === billNumber
+      );
+      console.log('🔍 Found cash bill:', !!bill, bill ? 'ID: ' + bill.id : 'Not found');
     } else if (billType === 'creditbill') {
       const creditBills = await firebaseService.getAll('creditbills');
-      bill = creditBills.find(b => b.invoiceNumber === billNumber);
+      console.log('🔍 Credit bills found:', creditBills.length);
+      console.log('🔍 Credit bill numbers (invoiceNumber):', creditBills.map(b => b.invoiceNumber));
+      console.log('🔍 Credit bill numbers (invoiceNo):', creditBills.map(b => b.invoiceNo));
+      console.log('🔍 Looking for bill number:', billNumber);
+      
+      // Try multiple field names since Firebase might use different field names
+      console.log('🔍 Credit bill fields sample:', creditBills[0] ? Object.keys(creditBills[0]) : 'No bills');
+      bill = creditBills.find(b => 
+        b.invoiceNumber === billNumber || 
+        b.invoiceNo === billNumber ||
+        b.creditBillNo === billNumber ||
+        b.invoiceNumber?.toString() === billNumber ||
+        b.invoiceNo?.toString() === billNumber
+      );
+      console.log('🔍 Found credit bill:', !!bill, bill ? 'ID: ' + bill.id : 'Not found');
     } else {
       // Search in both if bill type not specified
       const cashBills = await firebaseService.getAll('cashbills');
       const creditBills = await firebaseService.getAll('creditbills');
       
-      bill = cashBills.find(b => b.invoiceNumber === billNumber) || 
-             creditBills.find(b => b.invoiceNumber === billNumber);
+      console.log('🔍 Total bills found - Cash:', cashBills.length, 'Credit:', creditBills.length);
+      
+      // Try multiple field names for both collections
+      bill = cashBills.find(b => 
+        b.invoiceNumber === billNumber || 
+        b.invoiceNo === billNumber ||
+        b.cashBillNo === billNumber ||
+        b.invoiceNumber?.toString() === billNumber ||
+        b.invoiceNo?.toString() === billNumber
+      ) || 
+      creditBills.find(b => 
+        b.invoiceNumber === billNumber || 
+        b.invoiceNo === billNumber ||
+        b.creditBillNo === billNumber ||
+        b.invoiceNumber?.toString() === billNumber ||
+        b.invoiceNo?.toString() === billNumber
+      );
     }
     
     if (!bill) {
-      return res.status(404).json({ message: 'Bill not found' });
+      // Provide helpful debugging information
+      const cashBills = await firebaseService.getAll('cashbills');
+      const creditBills = await firebaseService.getAll('creditbills');
+      
+      // Get sample bill numbers for debugging
+      const sampleCashBills = cashBills.slice(0, 5).map(b => b.invoiceNumber || b.invoiceNo).filter(Boolean);
+      const sampleCreditBills = creditBills.slice(0, 5).map(b => b.invoiceNumber || b.invoiceNo).filter(Boolean);
+      
+      return res.status(404).json({ 
+        message: `❌ ${billType?.toUpperCase() || 'BILL'} with bill number "${billNumber}" not found.`,
+        suggestions: [
+          'Check if the bill number is correct (e.g., WCV-1, WIT-2, etc.)',
+          'Verify the bill type matches (Cash Bill vs Credit Bill)',
+          'Make sure the bill exists in the database',
+          'Try searching with a different date if specified'
+        ],
+        debug: {
+          searchedFor: billNumber,
+          billType: billType || 'both',
+          totalCashBills: cashBills.length,
+          totalCreditBills: creditBills.length,
+          sampleCashBills: sampleCashBills,
+          sampleCreditBills: sampleCreditBills
+        }
+      });
     }
     
     // Determine bill type if not specified
@@ -1428,6 +1499,170 @@ const findBillByNumber = async (req, res) => {
   }
 };
 
+// Get all credit bills for credit note selection
+const getCreditBills = async (req, res) => {
+  try {
+    const { company } = req.query;
+    console.log('getCreditBills - Requested company:', company);
+
+    // Get all credit bills
+    const bills = await billService.getCreditBills();
+    console.log('getCreditBills - Total bills found:', bills?.length || 0);
+
+    // Enhanced filtering with multiple company name variations
+    const filteredBills = company 
+      ? bills.filter(bill => {
+          // Handle multiple possible company name formats
+          const billCompanyName = bill.company?.name || bill.companyName || bill.selectedCompany;
+          
+          // Check for exact match first
+          if (billCompanyName === company) return true;
+          
+          // Handle "CASH VAPASE" variations
+          if (company.includes('CASH VAPASE') || company === 'CASH VAPASE') {
+            return billCompanyName === 'WYENFOS CASH VAPASE' || 
+                   billCompanyName === 'CASH VAPASE' ||
+                   billCompanyName?.includes('CASH VAPASE');
+          }
+          
+          // Handle other company variations
+          if (company.includes('WYENFOS') && billCompanyName?.includes('WYENFOS')) {
+            return billCompanyName.includes(company.replace('WYENFOS ', ''));
+          }
+          
+          return billCompanyName === company;
+        })
+      : bills;
+
+    console.log('getCreditBills - Filtered bills count:', filteredBills?.length || 0);
+    
+    if (company && filteredBills.length === 0) {
+      console.log('getCreditBills - No bills found for company. Sample bill company names:', 
+        bills.slice(0, 3).map(b => b.company?.name || b.companyName || b.selectedCompany));
+    }
+
+    res.status(200).json({ data: filteredBills || [] });
+  } catch (error) {
+    console.error('getCreditBills Error:', error);
+    res.status(200).json({ data: [] });
+  }
+};
+
+// Get all cash bills for credit note selection
+const getCashBills = async (req, res) => {
+  try {
+    const { company } = req.query;
+    console.log('getCashBills - Requested company:', company);
+
+    // Get all cash bills
+    const bills = await billService.getCashBills();
+    console.log('getCashBills - Total bills found:', bills?.length || 0);
+
+    // Enhanced filtering with multiple company name variations
+    const filteredBills = company 
+      ? bills.filter(bill => {
+          // Handle multiple possible company name formats
+          const billCompanyName = bill.company?.name || bill.companyName || bill.selectedCompany;
+          
+          // Check for exact match first
+          if (billCompanyName === company) return true;
+          
+          // Handle "CASH VAPASE" variations
+          if (company.includes('CASH VAPASE') || company === 'CASH VAPASE') {
+            return billCompanyName === 'WYENFOS CASH VAPASE' || 
+                   billCompanyName === 'CASH VAPASE' ||
+                   billCompanyName?.includes('CASH VAPASE');
+          }
+          
+          // Handle other company variations
+          if (company.includes('WYENFOS') && billCompanyName?.includes('WYENFOS')) {
+            return billCompanyName.includes(company.replace('WYENFOS ', ''));
+          }
+          
+          return billCompanyName === company;
+        })
+      : bills;
+
+    console.log('getCashBills - Filtered bills count:', filteredBills?.length || 0);
+    
+    if (company && filteredBills.length === 0) {
+      console.log('getCashBills - No bills found for company. Sample bill company names:', 
+        bills.slice(0, 3).map(b => b.company?.name || b.companyName || b.selectedCompany));
+    }
+
+    res.status(200).json({ data: filteredBills || [] });
+  } catch (error) {
+    console.error('getCashBills Error:', error);
+    res.status(200).json({ data: [] });
+  }
+};
+
+// Helper function to list all available bills for debugging
+const listAvailableBills = async (req, res) => {
+  try {
+    const { company } = req.query;
+    
+    const cashBills = await firebaseService.getAll('cashbills');
+    const creditBills = await firebaseService.getAll('creditbills');
+    
+    // Filter by company if provided
+    const filteredCashBills = company 
+      ? cashBills.filter(bill => {
+          const billCompanyName = bill.company?.name || bill.companyName || bill.selectedCompany;
+          return billCompanyName === company || billCompanyName?.includes(company);
+        })
+      : cashBills;
+      
+    const filteredCreditBills = company 
+      ? creditBills.filter(bill => {
+          const billCompanyName = bill.company?.name || bill.companyName || bill.selectedCompany;
+          return billCompanyName === company || billCompanyName?.includes(company);
+        })
+      : creditBills;
+    
+    const cashBillNumbers = filteredCashBills.map(b => ({
+      invoiceNumber: b.invoiceNumber || b.invoiceNo || b.cashBillNo,
+      company: b.company?.name || b.companyName || b.selectedCompany,
+      date: b.date || b.createdAt,
+      totalAmount: b.totalAmount || b.grandTotal,
+      id: b.id,
+      allFields: Object.keys(b) // Debug: show all available fields
+    })).filter(b => b.invoiceNumber);
+    
+    const creditBillNumbers = filteredCreditBills.map(b => ({
+      invoiceNumber: b.invoiceNumber || b.invoiceNo || b.creditBillNo,
+      company: b.company?.name || b.companyName || b.selectedCompany,
+      date: b.date || b.createdAt,
+      totalAmount: b.totalAmount || b.grandTotal,
+      id: b.id,
+      allFields: Object.keys(b) // Debug: show all available fields
+    })).filter(b => b.invoiceNumber);
+    
+    res.json({
+      success: true,
+      data: {
+        cashBills: {
+          total: filteredCashBills.length,
+          bills: cashBillNumbers
+        },
+        creditBills: {
+          total: filteredCreditBills.length,
+          bills: creditBillNumbers
+        },
+        company: company || 'all'
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error listing available bills:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to list bills', 
+      error: error.message 
+    });
+  }
+};
+
 export {
   getLatestCreditNote,
   getAllCreditNotes,
@@ -1440,5 +1675,8 @@ export {
   sendEmailUnsaved,
   generatePDF,
   generatePDFFromUnsaved,
-  findBillByNumber
+  findBillByNumber,
+  getCreditBills,
+  getCashBills,
+  listAvailableBills
 };

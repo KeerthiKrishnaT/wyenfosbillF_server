@@ -54,4 +54,7 @@ router.post('/staff/send-message', authenticateToken, sendMessage);
 router.get('/permission', authenticateToken, getPermissionRequests);
 router.put('/permission/:requestId', authenticateToken, updatePermissionRequest);
 
+// Message routes
+router.post('/send-message', authenticateToken, sendMessage);
+
 export default router;

@@ -1,7 +1,7 @@
 // Company logos configuration - direct Firebase Storage URLs
 export const companyLogos = {
   'WYENFOS': 'https://storage.googleapis.com/wyenfosbills.appspot.com/wyenfos.png',
-  'WYENFOS GOLD & DIAMONDS': 'https://storage.googleapis.com/wyenfosbills.appspot.com/wyenfos_gold.png',
+  'WYENFOS GOLD AND DIAMONDS': 'https://storage.googleapis.com/wyenfosbills.appspot.com/wyenfos_gold.png',
   'WYENFOS INFOTECH': 'https://storage.googleapis.com/wyenfosbills.appspot.com/wyenfos_infotech.png',
   'WYENFOS PURE DROPS': 'https://storage.googleapis.com/wyenfosbills.appspot.com/wyenfos%20pure%20drops.png',
   'AYUR FOR HERBALS INDIA': 'https://storage.googleapis.com/wyenfosbills.appspot.com/Ayur4life_logo.png',

@@ -4,20 +4,14 @@ import { generateUniqueId } from '../services/firebaseService.js';
 
 export const getAllSoldItems = async (req, res) => {
   try {
-    console.log('Getting all sold items for user:', req.user);
-    
-    // Fetch sold products from Firebase with detailed information
     const soldProducts = await firebaseService.getAll('soldProducts', 'soldDate', 'desc');
     
-    // Add additional information to each sold product
     const enhancedSoldProducts = soldProducts.map(product => ({
       ...product,
       totalAmount: (product.quantity || 0) * (product.unitPrice || 0),
       gstAmount: ((product.quantity || 0) * (product.unitPrice || 0) * (product.gst || 0)) / 100,
       formattedSoldDate: product.soldDate ? new Date(product.soldDate).toLocaleDateString() : 'N/A'
     }));
-    
-    console.log('Sold products fetched successfully, count:', enhancedSoldProducts.length);
     
     res.status(200).json({
       success: true,
@@ -39,17 +33,18 @@ export const createSoldItem = async (req, res) => {
       id: generateUniqueId(),
       ...req.body,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      isManualEntry: req.body.source === 'Manual Entry' || req.body.entryType === 'Manual',
+      entrySource: req.body.source || 'Manual Entry',
+      addedBy: req.body.addedBy || 'Purchase Admin'
     };
+    
     const newItem = await firebaseService.create('soldProducts', soldProductData);
-
-    // Update inventory stock
     const allInventory = await inventoryService.getAllInventoryItems();
     const updatedInventory = allInventory.find(item => item.itemCode === req.body.itemCode);
     if (updatedInventory) {
       updatedInventory.quantity -= Number(req.body.quantity);
       await inventoryService.updateInventoryItem(updatedInventory.id, updatedInventory);
-      // Trigger alert if inventory goes below threshold
       if (updatedInventory.quantity <= 5) {
         await sendNotificationEmail({
           type: 'low_stock',

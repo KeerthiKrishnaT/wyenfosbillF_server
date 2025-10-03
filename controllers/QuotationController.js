@@ -1,7 +1,6 @@
 import { 
   firebaseService 
 } from '../services/firebaseService.js';
-import { generateUniqueId } from '../services/firebaseService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -75,33 +74,101 @@ const createQuotation = async (req, res) => {
 
 const getQuotations = async (req, res) => {
   try {
-    const quotations = await firebaseService.getAll('quotations');
+    console.log('🔍 Fetching quotations from database...');
+    console.log('🔍 Firebase service available:', !!firebaseService);
+    console.log('🔍 Firebase service getAll method:', typeof firebaseService.getAll);
+    
+    let quotations = [];
+    try {
+      quotations = await firebaseService.getAll('quotations');
+      console.log('📋 Raw quotations from database:', quotations.length, 'quotations found');
+      console.log('📋 Raw quotations data:', quotations);
+      console.log('📋 Raw quotations data type:', typeof quotations);
+      console.log('📋 Raw quotations is array:', Array.isArray(quotations));
+    } catch (firebaseError) {
+      console.error('❌ Firebase service error:', firebaseError);
+      console.error('❌ Firebase error message:', firebaseError.message);
+      console.error('❌ Firebase error code:', firebaseError.code);
+      // Return empty array if Firebase fails
+      quotations = [];
+    }
+    
+    // If no quotations found, try alternative collection names
+    if (quotations.length === 0) {
+      console.log('🔄 No quotations found in "quotations" collection, trying alternative names...');
+      try {
+        const altQuotations = await firebaseService.getAll('quotation');
+        console.log('📋 Alternative quotations from "quotation" collection:', altQuotations.length, 'found');
+        if (altQuotations.length > 0) {
+          quotations.push(...altQuotations);
+        }
+      } catch (altError) {
+        console.log('📋 Alternative collection "quotation" not found or empty');
+      }
+      
+      // Try other possible collection names
+      const possibleCollections = ['quotation', 'quotes', 'quote'];
+      for (const collectionName of possibleCollections) {
+        try {
+          const altQuotations = await firebaseService.getAll(collectionName);
+          console.log(`📋 Alternative quotations from "${collectionName}" collection:`, altQuotations.length, 'found');
+          if (altQuotations.length > 0) {
+            quotations.push(...altQuotations);
+            break; // Stop after finding the first non-empty collection
+          }
+        } catch (altError) {
+          console.log(`📋 Alternative collection "${collectionName}" not found or empty`);
+        }
+      }
+    }
     
     // Populate createdBy data
-    const populatedQuotations = await Promise.all(
-      quotations.map(async (quotation) => {
-        const creator = quotation.createdBy ? await firebaseService.getById('users', quotation.createdBy) : null;
-        return {
-          ...quotation,
-          creator: creator ? { name: creator.name, email: creator.email } : null
-        };
-      })
-    );
+    let populatedQuotations = [];
+    try {
+      populatedQuotations = await Promise.all(
+        quotations.map(async (quotation) => {
+          const creator = quotation.createdBy ? await firebaseService.getById('users', quotation.createdBy) : null;
+          return {
+            ...quotation,
+            creator: creator ? { name: creator.name, email: creator.email } : null
+          };
+        })
+      );
+    } catch (populateError) {
+      console.error('❌ Error populating quotations:', populateError);
+      // If population fails, return quotations without creator data
+      populatedQuotations = quotations.map(quotation => ({
+        ...quotation,
+        creator: null
+      }));
+    }
     
+    console.log('✅ Populated quotations:', populatedQuotations.length, 'quotations ready to send');
+    console.log('✅ Sending response with status 200');
     res.json(populatedQuotations);
   } catch (error) {
+    console.error('❌ Error fetching quotations:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error code:', error.code);
     res.status(500).json({ message: error.message });
   }
 };
 
 const getQuotationById = async (req, res) => {
   try {
+    console.log('🔍 Fetching quotation by ID:', req.params.id);
+    console.log('🔍 Request params:', req.params);
+    
     // First, try direct lookup
     let quotation = await firebaseService.getById('quotations', req.params.id);
+    console.log('📋 Direct lookup result:', quotation ? 'Found' : 'Not found');
     
     // If not found, search by quotationId or other fields
     if (!quotation) {
+      console.log('🔄 Searching in all quotations...');
       const allQuotations = await firebaseService.getAll('quotations');
+      console.log('📋 Total quotations available:', allQuotations.length);
       
       quotation = allQuotations.find(q => 
         q.id === req.params.id || 
@@ -109,9 +176,11 @@ const getQuotationById = async (req, res) => {
         q.quotationId === req.params.id ||
         q.refNo === req.params.id
       );
+      console.log('📋 Search result:', quotation ? 'Found' : 'Not found');
     }
     
     if (!quotation) {
+      console.log('❌ Quotation not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Quotation not found' });
     }
     
@@ -122,8 +191,12 @@ const getQuotationById = async (req, res) => {
       creator: creator ? { name: creator.name, email: creator.email } : null
     };
     
+    console.log('✅ Quotation found and populated:', populatedQuotation);
     res.json(populatedQuotation);
   } catch (error) {
+    console.error('❌ Error fetching quotation by ID:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error message:', error.message);
     res.status(500).json({ message: error.message });
   }
 };
@@ -299,25 +372,16 @@ const deleteQuotation = async (req, res) => {
 
 const generatePDF = async (req, res) => {
   try {
+    console.log('🔍 PDF generation request received');
+    console.log('📋 Request body:', req.body);
+    
     const { quotationData } = req.body;
-    
     if (!quotationData) {
-      return res.status(400).json({
-        success: false,
-        message: 'Quotation data is required'
-      });
+      console.log('❌ No quotation data provided');
+      return res.status(400).json({ success: false, message: "Quotation data is required" });
     }
-
-    // Validate required fields
-    const requiredFields = ['refNo', 'date', 'to', 'from', 'subject'];
-    const missingFields = requiredFields.filter(field => !quotationData[field]);
     
-    if (missingFields.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Missing required fields: ${missingFields.join(', ')}`
-      });
-    }
+    console.log('📋 Quotation data:', quotationData);
 
     // Helper function to safely convert values to strings
     const safeString = (value) => {
@@ -333,432 +397,243 @@ const generatePDF = async (req, res) => {
       return String(value);
     };
 
-    // Import jsPDF with better error handling
-    let jsPDF;
-    try {
-      const jsPDFModule = await import('jspdf');
-      
-      // Handle different export formats
-      if (jsPDFModule.default && typeof jsPDFModule.default === 'function') {
-        jsPDF = jsPDFModule.default;
-      } else if (jsPDFModule.jsPDF && typeof jsPDFModule.jsPDF === 'function') {
-        jsPDF = jsPDFModule.jsPDF;
-      } else if (typeof jsPDFModule === 'function') {
-        jsPDF = jsPDFModule;
-      } else {
-        // Try to find the constructor in the module
-        const possibleConstructors = Object.values(jsPDFModule).filter(val => typeof val === 'function');
-        if (possibleConstructors.length > 0) {
-          jsPDF = possibleConstructors[0];
-        } else {
-          throw new Error(`No valid jsPDF constructor found in module`);
-        }
-      }
-      
-      if (typeof jsPDF !== 'function') {
-        throw new Error(`jsPDF is not a constructor (type: ${typeof jsPDF})`);
-      }
-      
-      console.log('jsPDF constructor ready:', typeof jsPDF);
-    } catch (importError) {
-      console.error('Error importing jsPDF:', importError);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to import PDF library',
-        error: importError.message
-      });
-    }
+    console.log('📄 Importing jsPDF...');
+    const jsPDFModule = await import('jspdf');
+    console.log('📄 jsPDF module imported:', !!jsPDFModule);
+    
+    const jsPDF = jsPDFModule.jsPDF || jsPDFModule.default;
+    console.log('📄 jsPDF constructor:', typeof jsPDF);
+    
+    const doc = new jsPDF('p', 'mm', 'a4');
+    console.log('📄 PDF document created');
 
-    // Import QRCode (optional)
-    let QRCode;
-    try {
-      const qrModule = await import('qrcode');
-      QRCode = qrModule.default || qrModule;
-      console.log('QRCode imported successfully');
-    } catch (qrError) {
-      console.log('⚠️ QRCode import failed, continuing without QR:', qrError.message);
-      QRCode = null;
-    }
-
-    // Create PDF document
-    console.log('📄 Creating PDF document...');
-    const doc = new jsPDF();
+    // Margins & layout
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
-    const rightMargin = 40; // Increased right margin to prevent text cutoff
-    let y = 20;
+    const contentWidth = pageWidth - 2 * margin;
+    let y = margin;
 
-
-
-
-    // Header Layout: Logo + Company Name on left, QUOTATION + Details on right
-    const headerY = y;
+    // === HEADER ===
+    const logoX = margin;
+    const logoSize = 30;
     
-    // Left side: Logo and Company Name
-    const leftX = margin;
+    // Get company-specific logo based on selected company
+    const getCompanyLogoPath = (companyName) => {
+      const logoMap = {
+        'WYENFOS INFOTECH': 'wyenfos_infotech.png',
+        'WYENFOS GOLD AND DIAMONDS': 'wyenfos_gold.png',
+        'WYENFOS ADS': 'wyenfos_ads.png',
+        'WYENFOS CASH VAPASE': 'wyenfos_cash.png',
+        'AYUR4LIFE HERBALS INDIA': 'Ayur4life_logo.png',
+        'WYENFOS': 'wyenfos.png',
+        'WYENFOS PURE DROPS': 'wyenfos pure drops.png'
+      };
+      return logoMap[companyName] || 'wyenfos.png';
+    };
     
-    // Add Company Logo based on selected company
     try {
-      console.log('🖼️ Adding logo to left side of header...');
-      
-      // Get logo filename based on selected company
-      let logoFileName = 'Wyenfosbills_logo.png'; // Default WYENFOS logo
-      
-      if (quotationData.selectedCompany === 'AYUR FOR HERBALS INDIA' || 
-          (quotationData.selectedCompany && quotationData.selectedCompany.name === 'AYUR FOR HERBALS INDIA')) {
-        logoFileName = 'Ayur4life_logo.png';
-        console.log('🏢 Using AYUR FOR HERBALS INDIA logo:', logoFileName);
-      } else {
-        console.log('🏢 Using WYENFOS BILLS logo:', logoFileName);
-      }
-      
+      const logoFileName = getCompanyLogoPath(safeString(quotationData.selectedCompany));
       const logoPath = path.join(__dirname, '..', 'uploads', logoFileName);
       if (fs.existsSync(logoPath)) {
-        try {
-          const logoBuffer = fs.readFileSync(logoPath);
-          const logoBase64 = logoBuffer.toString('base64');
-          // Position logo on the left side
-          doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', leftX, headerY, 30, 20);
-        } catch (imageError) {
-          // Continue without logo
-        }
+        const logoBuffer = fs.readFileSync(logoPath);
+        const logoBase64 = logoBuffer.toString('base64');
+        doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', logoX, y, logoSize, logoSize);
       }
-    } catch (logoError) {
-      console.error('❌ Error in logo handling:', logoError.message);
-    }
-    
-    // Company name next to logo
+    } catch {}
+
+    // Company name and QUOTATION heading on the same line
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    
-    // Use the selected company name directly
-    let companyName = 'WYENFOS BILLS'; // Default fallback
-    
-    if (quotationData.selectedCompany) {
-      if (typeof quotationData.selectedCompany === 'string') {
-        companyName = quotationData.selectedCompany;
-      } else if (quotationData.selectedCompany.name) {
-        companyName = quotationData.selectedCompany.name;
-      }
-    }
-    
-    console.log('🏢 Selected company for PDF:', companyName);
-    
-    console.log('🏢 Company name for PDF:', companyName);
-    // Position company name to the right of the logo
-    doc.text(companyName, leftX + 35, headerY + 12);
-    
-    // Right side: QUOTATION title and details - completely right aligned
-    const rightX = pageWidth - rightMargin; // Full right margin
-    
-    // QUOTATION title
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('QUOTATION', rightX, headerY + 8, { align: 'right' });
-    
-    // Quotation details below the title
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    
-    // Generate quotation ID if not present
-    let displayQuotationId = quotationData.quotationId;
-    if (!displayQuotationId) {
-      try {
-        displayQuotationId = await generateQuotationId();
-      } catch (error) {
-        displayQuotationId = 'N/A';
-      }
-    }
-    
-    doc.text(`QUOTATION No: ${safeString(displayQuotationId)}`, rightX, headerY + 20, { align: 'right' });
-    doc.text(`Date: ${safeString(quotationData.date)}`, rightX, headerY + 28, { align: 'right' });
-    doc.text(`Ref: ${safeString(quotationData.refNo)}`, rightX, headerY + 36, { align: 'right' });
-    
-    // Move to next section
-    y = headerY + 50;
+    doc.text(safeString(quotationData.selectedCompany) || 'WYENFOS INFOTECH', logoX + logoSize + 5, y + 12);
+    doc.text('QUOTATION', pageWidth - margin, y + 12, { align: 'right' });
 
-    // Quotation details
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`QUOTATION No: ${safeString(quotationData.quotationId) || 'QUT-1'}`, pageWidth - margin, y + 20, { align: 'right' });
+    doc.text(`Date: ${safeString(quotationData.date) || '2025-08-26'}`, pageWidth - margin, y + 28, { align: 'right' });
+
+    y += 45;
+
+    // === QUOTATION DETAILS ===
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
     doc.text('Quotation Details:', margin, y);
     y += 10;
 
-    doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
-    
-    // Quotation details section (moved from header)
-    doc.text(`Quotation ID: ${safeString(displayQuotationId)}`, margin, y);
-    doc.text(`Ref. No: ${safeString(quotationData.refNo)}`, margin, y + 8);
-    doc.text(`Date: ${safeString(quotationData.date)}`, pageWidth - rightMargin - 50, y);
-    y += 20;
-
-    // To and From
     doc.setFont('helvetica', 'bold');
     doc.text('To:', margin, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(safeString(quotationData.to), margin + 20, y);
+    doc.text(safeString(quotationData.to) || 'N/A', margin + 20, y);
     y += 10;
 
     doc.setFont('helvetica', 'bold');
     doc.text('From:', margin, y);
     doc.setFont('helvetica', 'normal');
-    doc.text(safeString(quotationData.from), margin + 20, y);
+    doc.text(safeString(quotationData.from) || 'N/A', margin + 20, y);
     y += 15;
 
-    // Subject
-    if (quotationData.subject) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Subject:', margin, y);
-      doc.setFont('helvetica', 'normal');
-      doc.text(safeString(quotationData.subject), margin + 20, y);
-      y += 15;
-    }
-
-    // Greeting
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(12);
-    doc.text('Dear Sir,', margin, y);
-    y += 10;
-    
-    // Split long text to prevent cutoff
-    const greetingText = 'With reference to the above-mentioned subject, we are hereby pleased to quote you our best prices as follows:';
-    const maxWidth = pageWidth - margin - rightMargin;
-    const lines = doc.splitTextToSize(greetingText, maxWidth);
-    doc.text(lines, margin, y);
-    y += (lines.length * 5) + 15;
-
-    // Items table with proper structure, background color, and borders
-    if (quotationData.items && quotationData.items.length > 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.text('Items:', margin, y);
-      y += 10;
-
-      // Table configuration
-      const headers = ['Sr. No.', 'Description', 'Quantity', 'Rate', 'Amount'];
-      const colWidths = [25, 70, 25, 25, 30];
-      const tableWidth = colWidths.reduce((sum, width) => sum + width, 0);
-      const tableX = margin;
-      const headerY = y;
-      const rowHeight = 12;
-      const cellPadding = 2;
-
-      // Draw table border
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.5);
-      doc.rect(tableX, headerY - 5, tableWidth, rowHeight + 10);
-
-      // Table header with background color
-      doc.setFillColor(240, 240, 240); // Light gray background
-      doc.rect(tableX, headerY - 5, tableWidth, rowHeight, 'F');
-      
-      // Header text
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
-      let x = tableX + cellPadding;
-      headers.forEach((header, index) => {
-        doc.text(header, x, headerY + 2);
-        x += colWidths[index];
-      });
-
-      // Table data rows with borders
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setFillColor(255, 255, 255); // White background for data rows
-      
-      quotationData.items.forEach((item, index) => {
-        if (y > 250) {
-          doc.addPage();
-          y = 20;
-          headerY = y;
-        }
-
-        const rowY = headerY + rowHeight + (index * rowHeight);
-        
-        // Draw row border
-        doc.rect(tableX, rowY - 2, tableWidth, rowHeight, 'S');
-        
-        // Fill row background
-        doc.rect(tableX, rowY - 2, tableWidth, rowHeight, 'F');
-        
-        // Row data
-        x = tableX + cellPadding;
-        doc.text(safeString(item.srNo || (index + 1)), x, rowY + 2);
-        x += colWidths[0];
-        doc.text(safeString(item.description), x, rowY + 2);
-        x += colWidths[1];
-        doc.text(safeString(item.quantity), x, rowY + 2);
-        x += colWidths[2];
-        doc.text(safeString(item.rate), x, rowY + 2);
-        x += colWidths[3];
-        doc.text(`Rs. ${safeString(item.amount)}`, x, rowY + 2);
-        
-        y = rowY + rowHeight + 5;
-      });
-
-      // Draw column borders
-      let borderX = tableX;
-      headers.forEach((header, index) => {
-        borderX += colWidths[index];
-        if (index < headers.length - 1) {
-          doc.line(borderX, headerY - 5, borderX, y - 5);
-        }
-      });
-    }
-
-    y += 15;
-
-    // Total
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.text(`Total: Rs. ${safeString(quotationData.total)}`, pageWidth - rightMargin - 50, y);
+    doc.text('Subject:', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(safeString(quotationData.subject) || 'N/A', margin + 25, y);
     y += 20;
 
-    // Notes
-    if (quotationData.notes) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text('Notes:', margin, y);
-      y += 8;
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      const notesLines = doc.splitTextToSize(safeString(quotationData.notes), maxWidth);
-      doc.text(notesLines, margin, y);
-      y += (notesLines.length * 5) + 10;
-    }
+    doc.text('Dear Sir,', margin, y);
+    y += 8;
 
-    // Terms and conditions
+    const intro = "With reference to the above-mentioned subject, we are hereby pleased to quote you our best prices as follows:";
+    const introLines = doc.splitTextToSize(intro, contentWidth);
+    doc.text(introLines, margin, y);
+    y += introLines.length * 6 + 10;
+
+    // === ITEMS TABLE ===
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('Items:', margin, y);
     y += 10;
+
+    const headers = ['Sr. No.', 'Description', 'Quantity', 'Rate', 'Amount'];
+    const colWidths = [20, 80, 25, 25, 30];
+    const tableStartY = y;
+
+    // Header background
+    doc.setFillColor(153, 122, 141);
+    doc.rect(margin, tableStartY, contentWidth, 10, 'F');
+
+    // Header text
+    doc.setFontSize(10);
+    doc.setTextColor(255, 255, 255);
+    let x = margin;
+    headers.forEach((header, i) => {
+      const align = i === 1 ? 'left' : i === 4 || i === 3 ? 'right' : 'center';
+      doc.text(header, x + (colWidths[i] / 2), tableStartY + 7, { align });
+      x += colWidths[i];
+    });
+
+    // Reset for table rows
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    y += 12;
+
+    quotationData.items?.forEach((item, idx) => {
+      let rowX = margin;
+      const rowY = y + idx * 8;
+      if (rowY > 250) { doc.addPage(); y = margin; }
+
+      const rowData = [
+        `${idx + 1}`,
+        safeString(item.description) || '',
+        safeString(item.quantity) || '',
+        safeString(item.rate) || '',
+        `Rs. ${safeString(item.amount) || ''}`
+      ];
+
+      rowData.forEach((text, i) => {
+        const align = i === 1 ? 'left' : i === 4 || i === 3 ? 'right' : 'center';
+        doc.text(safeString(text), rowX + (colWidths[i] / 2), rowY + 5, { align });
+        rowX += colWidths[i];
+      });
+
+      // Row border
+      doc.rect(margin, rowY, contentWidth, 8);
+    });
+
+    y += (quotationData.items?.length || 1) * 8 + 15;
+
+    // === TOTAL ===
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('Terms & Conditions:', margin, y);
-    y += 8;
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
+    doc.text(`Total: Rs. ${safeString(quotationData.total) || '0.00'}`, pageWidth - margin, y, { align: 'right' });
+    y += 20;
+
+    // === TERMS & CONDITIONS ===
     const terms = [
-      'Extra GST 18% + Transportation',
-      'Payment: 50% in advance once we confirm the order.',
-      'Delivery: 15 to 20 days from the confirmation.',
-      'This quotation is valid for 30 DAYS from the date of issue.'
+      "Extra GST 18% + Transportation",
+      "Payment: 50% in advance once we confirm the order.",
+      "Delivery: 15 to 20 days from the confirmation.",
+      "This quotation is valid for 30 DAYS from the date of issue."
     ];
-    
+
+    if (y + terms.length * 6 > 270) { doc.addPage(); y = margin; }
+
+    doc.setFontSize(12);
+    doc.text("Terms & Conditions:", margin, y);
+    y += 8;
+
+    doc.setFont('helvetica', 'normal');
     terms.forEach(term => {
-      if (y > 250) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.text(`• ${term}`, margin, y);
+      doc.text(`• ${term}`, margin + 5, y);
       y += 6;
     });
 
-    // Contact information
-    y += 10;
-    if (quotationData.contactName || quotationData.contactMobile || quotationData.contactEmail) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text('Contact Information:', margin, y);
-      y += 8;
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      if (quotationData.contactName) {
-        doc.text(`Name: ${safeString(quotationData.contactName)}`, margin, y);
-        y += 5;
-      }
-      if (quotationData.contactMobile) {
-        doc.text(`Mobile: ${safeString(quotationData.contactMobile)}`, margin, y);
-        y += 5;
-      }
-      if (quotationData.contactEmail) {
-        doc.text(`Email: ${safeString(quotationData.contactEmail)}`, margin, y);
-        y += 5;
-      }
-    }
-
-    // Closing section - arranged like screenshot with text input area and closing statement
+    // === NOTES SECTION ===
     y += 15;
-    
-    // Text input area (represented as a bordered rectangle)
-    const inputAreaHeight = 60;
-    const inputAreaWidth = maxWidth;
-    
-    // Draw text input area border
-    doc.setDrawColor(200, 200, 200); // Light gray border
-    doc.setLineWidth(0.5);
-    doc.rect(margin, y, inputAreaWidth, inputAreaHeight, 'S');
-    
-    // Add placeholder text inside the input area
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(150, 150, 150); // Light gray text for placeholder
-    doc.text('Enter additional notes or comments here...', margin + 5, y + 10);
-    
-    y += inputAreaHeight + 15;
-    
-    // Closing statement below the input area
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0); // Black text for closing statement
-    
-    const closingText = 'We hope the above quotation is in line with your requirement. If you have any further queries, please feel free to contact the undersigned.';
-    const closingLines = doc.splitTextToSize(closingText, maxWidth);
-    doc.text(closingLines, margin, y);
-    y += (closingLines.length * 5) + 15;
-    
-    // "Thanks" positioned on the right side
-    doc.text('Thanks', pageWidth - rightMargin, y, { align: 'right' });
+    doc.text('Notes:', margin, y);
     y += 8;
     
-    // "Best regards" positioned on the right side below thanks
-    doc.text('Best regards,', pageWidth - rightMargin, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    const notesText = quotationData.notes && quotationData.notes.trim() ? safeString(quotationData.notes) : 'No additional notes provided.';
+    const notesLines = doc.splitTextToSize(notesText, contentWidth);
+    doc.text(notesLines, margin, y);
+    y += notesLines.length * 6 + 10;
+
+    // === FOOTER ===
+    y += 20;
     
+    // Check if there's enough space for footer, if not add new page
+    if (y > 200) {
+      doc.addPage();
+      y = margin;
+    }
+    
+    // Split the text to fit within content width with right padding
+    const footerText = 'We hope the above quotation meets your requirements. If you have any further queries, please feel free to contact us.';
+    const footerLines = doc.splitTextToSize(footerText, contentWidth - 20); // Add 20px right padding
+    doc.text(footerLines, margin, y);
+    y += footerLines.length * 6 + 10;
+
+    doc.text('Thanks', pageWidth - margin, y, { align: 'right' });
+    y += 8;
+    doc.text('Best regards,', pageWidth - margin, y, { align: 'right' });
+    y += 8;
+    doc.setFont('helvetica', 'bold');
+    doc.text(safeString(quotationData.selectedCompany) || 'WYENFOS INFOTECH', pageWidth - margin, y, { align: 'right' });
+    
+    // === SIGNATURE SECTION ===
+    y += 20;
+    
+    // Check if there's enough space for signature section, if not add new page
+    if (y > 250) {
+      doc.addPage();
+      y = margin;
+    }
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text('Authorized Signature:', margin, y);
     y += 15;
-
-    // Generate PDF as base64
-    console.log('🔄 Generating PDF as base64...');
-    try {
-      const pdfBase64 = doc.output('datauristring').split(',')[1];
-  
-
-      res.json({
-        success: true,
-        message: 'PDF generated successfully',
-        data: {
-          pdf: pdfBase64
-        }
-      });
-    } catch (outputError) {
-      console.error('❌ Error generating PDF output:', outputError);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to generate PDF output',
-        error: outputError.message
-      });
-    }
-
-  } catch (error) {
-    console.error('❌ Error generating PDF:', error);
-    console.error('📋 Error stack:', error.stack);
     
-    // Try to provide a more helpful error message
-    let errorMessage = 'Failed to generate PDF';
-    if (error.message.includes('jsPDF')) {
-      errorMessage = 'PDF library error - please try again';
-    } else if (error.message.includes('fs')) {
-      errorMessage = 'File system error - please check server configuration';
-    } else if (error.message.includes('import')) {
-      errorMessage = 'Module import error - please restart server';
-    }
+    // Draw signature line
+    doc.line(margin, y, margin + 80, y);
+    doc.text('_________________________', margin, y + 5);
     
-    res.status(500).json({
-      success: false,
-      message: errorMessage,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
+    // Add date line on the right
+    doc.text('Date: _________________', pageWidth - margin - 60, y + 5);
+
+    // === RETURN BASE64 PDF ===
+    console.log('📄 Generating PDF base64...');
+    const pdfBase64 = doc.output('datauristring').split(',')[1];
+    console.log('📄 PDF base64 length:', pdfBase64.length);
+    console.log('✅ PDF generation successful');
+    
+    return res.json({ success: true, pdf: pdfBase64 });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'PDF generation failed', error: err.message });
   }
 };
 

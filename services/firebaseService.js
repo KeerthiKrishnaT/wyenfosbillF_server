@@ -509,7 +509,7 @@ export const companyService = {
         },
         {
           id: '2',
-          name: 'WYENFOS GOLD & DIAMONDS',
+          name: 'WYENFOS GOLD AND DIAMONDS',
           prefix: 'WGD',
           logoUrl: '/uploads/wyenfos_gold.png'
         },

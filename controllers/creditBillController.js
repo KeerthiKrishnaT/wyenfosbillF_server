@@ -192,14 +192,43 @@ export const getLatestInvoice = async (req, res) => {
 export const getAllBills = async (req, res) => {
   try {
     const { company } = req.query;
+    console.log('getAllBills - Requested company:', company);
 
     // Get all credit bills
     const bills = await billService.getCreditBills();
+    console.log('getAllBills - Total bills found:', bills?.length || 0);
 
-    // Filter by company if provided
+    // Enhanced filtering with multiple company name variations
     const filteredBills = company 
-      ? bills.filter(bill => bill.company?.name === company)
+      ? bills.filter(bill => {
+          // Handle multiple possible company name formats
+          const billCompanyName = bill.company?.name || bill.companyName || bill.selectedCompany;
+          
+          // Check for exact match first
+          if (billCompanyName === company) return true;
+          
+          // Handle "CASH VAPASE" variations
+          if (company.includes('CASH VAPASE') || company === 'CASH VAPASE') {
+            return billCompanyName === 'WYENFOS CASH VAPASE' || 
+                   billCompanyName === 'CASH VAPASE' ||
+                   billCompanyName?.includes('CASH VAPASE');
+          }
+          
+          // Handle other company variations
+          if (company.includes('WYENFOS') && billCompanyName?.includes('WYENFOS')) {
+            return billCompanyName.includes(company.replace('WYENFOS ', ''));
+          }
+          
+          return billCompanyName === company;
+        })
       : bills;
+
+    console.log('getAllBills - Filtered bills count:', filteredBills?.length || 0);
+    
+    if (company && filteredBills.length === 0) {
+      console.log('getAllBills - No bills found for company. Sample bill company names:', 
+        bills.slice(0, 3).map(b => b.company?.name || b.companyName || b.selectedCompany));
+    }
 
     res.status(200).json({ data: filteredBills || [] });
   } catch (error) {
@@ -573,7 +602,7 @@ export const generatePDF = async (req, res) => {
       let totalWidth = 0;
       columnWidths.forEach(width => totalWidth += width);
       
-      doc.setFillColor(240, 240, 240); // Light gray background
+      doc.setFillColor(153, 122, 141); // #997a8d - Purple background like CreditNote
       doc.rect(startX, headerY - 3, totalWidth, 8, 'F');
       
       // Draw table headers
@@ -691,12 +720,12 @@ export const generatePDF = async (req, res) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     const bankDetails = [
-      { label: 'Company name:', value: (bill.company && bill.company.name) ? bill.company.name : 'WYENFOS INFOTECH PRIVATE LIMITED' },
-      { label: 'Account number:', value: '10192468394' },
-      { label: 'IFSC:', value: 'IDFB0080732' },
-      { label: 'SWIFT code:', value: 'IDFBINBBMUM' },
-      { label: 'Bank name:', value: 'IDFC FIRST' },
-      { label: 'Branch:', value: 'THRISSUR - EAST FORT THRISSUR BRANCH' }
+      { label: 'Company name:', value: (bill.company && bill.company.name) ? bill.company.name : 'WYENFOS' },
+      { label: 'Account number:', value: (bill.company && bill.company.bankDetails && bill.company.bankDetails.accountNumber) ? bill.company.bankDetails.accountNumber : '10192468394' },
+      { label: 'IFSC:', value: (bill.company && bill.company.bankDetails && bill.company.bankDetails.ifsc) ? bill.company.bankDetails.ifsc : 'KKBK0007348' },
+      { label: 'SWIFT code:', value: (bill.company && bill.company.bankDetails && bill.company.bankDetails.swiftCode) ? bill.company.bankDetails.swiftCode : 'KKBKINBB' },
+      { label: 'Bank name:', value: (bill.company && bill.company.bankDetails && bill.company.bankDetails.bankName) ? bill.company.bankDetails.bankName : 'Kotak Mahindra Bank' },
+      { label: 'Branch:', value: (bill.company && bill.company.bankDetails && bill.company.bankDetails.branch) ? bill.company.bankDetails.branch : 'Thrissur Branch' }
     ];
 
     bankDetails.forEach(detail => {
@@ -890,6 +919,24 @@ export const generatePDFFromUnsaved = async (req, res) => {
       doc.text('LOGO', margin + 15, y + 15, { align: 'center' });
     }
 
+    // Center logo for dual-logo companies (WYENFOS ADS and WYENFOS CASH VAPASE)
+    const isDualLogoCompany = companyName === 'WYENFOS ADS' || companyName === 'WYENFOS CASH VAPASE';
+    if (isDualLogoCompany) {
+      try {
+        const centerLogoFileName = companyName === 'WYENFOS ADS' ? 'wyenfos_ads.png' : 'wyenfos_cash.png';
+        const centerLogoPath = path.join(process.cwd(), 'uploads', centerLogoFileName);
+        
+        if (fs.existsSync(centerLogoPath)) {
+          const centerLogoBuffer = fs.readFileSync(centerLogoPath);
+          // Position center logo in the middle of the header
+          const centerX = pageWidth / 2 - 15; // Center position minus half logo width
+          doc.addImage(centerLogoBuffer, 'PNG', centerX, y, 30, 30);
+        }
+      } catch (centerLogoError) {
+        console.error('Error loading center logo:', centerLogoError);
+      }
+    }
+
     // Company Details (Right side of logo - same line as logo)
     const logoRightX = margin + 40; // Start company details to the right of logo
     doc.setFont('helvetica', 'bold');
@@ -959,7 +1006,7 @@ export const generatePDFFromUnsaved = async (req, res) => {
       { label: 'GSTIN:', value: billData.customerGSTIN || 'N/A' }
     ];
 
-    const rightCustomerX = pageWidth - margin - 80;
+    const rightCustomerX = pageWidth / 2 + 20; // Align with red line position like CreditNote
     let leftY = y;
     let rightY = y;
 
@@ -1015,7 +1062,7 @@ export const generatePDFFromUnsaved = async (req, res) => {
     let x = margin;
 
     // Draw background for headers
-    doc.setFillColor(240, 240, 240);
+    doc.setFillColor(153, 122, 141); // #997a8d - Purple background like CreditNote
     doc.rect(x, y - 5, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
 
     headers.forEach((header, index) => {
@@ -1155,12 +1202,12 @@ export const generatePDFFromUnsaved = async (req, res) => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     const bankDetails = [
-      { label: 'Company name:', value: (billData.company && billData.company.name) ? billData.company.name : 'WYENFOS INFOTECH PRIVATE LIMITED' },
-      { label: 'Account number:', value: '10192468394' },
-      { label: 'IFSC:', value: 'IDFB0080732' },
-      { label: 'SWIFT code:', value: 'IDFBINBBMUM' },
-      { label: 'Bank name:', value: 'IDFC FIRST' },
-      { label: 'Branch:', value: 'THRISSUR - EAST FORT THRISSUR BRANCH' }
+      { label: 'Company name:', value: (billData.company && billData.company.name) ? billData.company.name : 'WYENFOS' },
+      { label: 'Account number:', value: (billData.company && billData.company.bankDetails && billData.company.bankDetails.accountNumber) ? billData.company.bankDetails.accountNumber : '10192468394' },
+      { label: 'IFSC:', value: (billData.company && billData.company.bankDetails && billData.company.bankDetails.ifsc) ? billData.company.bankDetails.ifsc : 'KKBK0007348' },
+      { label: 'SWIFT code:', value: (billData.company && billData.company.bankDetails && billData.company.bankDetails.swiftCode) ? billData.company.bankDetails.swiftCode : 'KKBKINBB' },
+      { label: 'Bank name:', value: (billData.company && billData.company.bankDetails && billData.company.bankDetails.bankName) ? billData.company.bankDetails.bankName : 'Kotak Mahindra Bank' },
+      { label: 'Branch:', value: (billData.company && billData.company.bankDetails && billData.company.bankDetails.branch) ? billData.company.bankDetails.branch : 'Thrissur Branch' }
     ];
 
     // QR Code and Signature (Right side of bank details)
@@ -1189,10 +1236,10 @@ export const generatePDFFromUnsaved = async (req, res) => {
         // Generate QR code data (bank details for payment)
         const qrData = {
           company: (billData.company && billData.company.name) ? billData.company.name : 'WYENFOS',
-          accountNumber: '10192468394',
-          ifsc: 'IDFB0080732',
-          bankName: 'IDFC FIRST',
-          branch: 'THRISSUR - EAST FORT THRISSUR BRANCH',
+          accountNumber: (billData.company && billData.company.bankDetails && billData.company.bankDetails.accountNumber) ? billData.company.bankDetails.accountNumber : '10192468394',
+          ifsc: (billData.company && billData.company.bankDetails && billData.company.bankDetails.ifsc) ? billData.company.bankDetails.ifsc : 'KKBK0007348',
+          bankName: (billData.company && billData.company.bankDetails && billData.company.bankDetails.bankName) ? billData.company.bankDetails.bankName : 'Kotak Mahindra Bank',
+          branch: (billData.company && billData.company.bankDetails && billData.company.bankDetails.branch) ? billData.company.bankDetails.branch : 'Thrissur Branch',
           amount: (billData.totals && billData.totals.grandTotal) ? billData.totals.grandTotal : '0',
           billNumber: billData.invoiceNo || billData.invoiceNumber || 'N/A'
         };

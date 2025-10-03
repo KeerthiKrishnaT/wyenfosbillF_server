@@ -1,20 +1,16 @@
 import express from 'express';
-import {
-  getAllProductReturns,
-  getReturnsByItemCode,
-  getReturnsSummary
-} from '../controllers/ProductReturnController.js';
+import { getAllCreditNotes } from '../controllers/CreditNoteController.js';
 import { verifyToken } from '../middleware/AuthMiddleware.js';
 
 const router = express.Router();
 
-// Get all product returns
-router.get('/', verifyToken, getAllProductReturns);
+// Get all product returns (redirected to credit notes)
+router.get('/', verifyToken, getAllCreditNotes);
 
-// Get returns by item code
-router.get('/item/:itemCode', verifyToken, getReturnsByItemCode);
+// Get returns by item code (redirected to credit notes)
+router.get('/item/:itemCode', verifyToken, getAllCreditNotes);
 
-// Get returns summary statistics
-router.get('/summary', verifyToken, getReturnsSummary);
+// Get returns summary statistics (redirected to credit notes)
+router.get('/summary', verifyToken, getAllCreditNotes);
 
 export default router;

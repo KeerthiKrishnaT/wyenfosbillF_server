@@ -20,6 +20,15 @@ const router = express.Router();
 // Use memory storage for Firebase Storage uploads
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Public health check endpoint (no auth required)
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'Company API is working!',
+    timestamp: new Date().toISOString(),
+    status: 'healthy'
+  });
+});
+
 // Company management routes
 router.post('/', verifyToken, verifySuperAdmin, upload.any(), createCompany);
 router.get('/', verifyToken, getCompanies);
